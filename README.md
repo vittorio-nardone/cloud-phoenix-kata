@@ -4,19 +4,22 @@ This problem is about to create a production ready infrastructure for the Phoeni
 ## Problem
 
 The development team has released the phoenix application code.
-Your task, if you want to accept it, is to create the production infrastructure
-for the Phoenix application. You must pay attention to some unwanted features
-that were introduced during development. In particular:
+Your task is to create the production infrastructure
+for the Phoenix application.
+The application has two particularly troubling endpoints:
 
 - `GET /crash` kill the application process
 - `GET /generatecert` is not optimized and creates resource consumption peaks
+
+You can't block those endpoints because the universe really wants them to be exposed but at the same time 
+you need to guarantee that the application is always available.
 
 ## General Requirements
 
 - You may use whatever programming language/platform you prefer. Use something that you know well.
 - You must release your work with an OSI-approved open source license of your choice.
 - You must deliver the sources, with a README that explains how to run it.
-- Add the code to your own Github account and send us the link.
+- Add the code to your own Github/GitLab/.. account and send us the link.
 
 ## Application Requirements
 
@@ -34,8 +37,8 @@ that were introduced during development. In particular:
 ## Problem Requirements
 
 1. Automate the creation of the infrastructure and the setup of the application.
-2. Recover from crashes. Implement a method autorestart the service on crash
-3. Backup the logs and database with rotation of 7 days
+2. Recover from crashes. Implement an autorestart mechanism.
+3. Backup the logs and database with a rotation of 7 days
 4. Notify any CPU peak
 5. Implements a CI/CD pipeline for the code
-6. Scale when the number of request are greater than 10 req /sec
+6. Scale when the number of requests is greater than 10 req /sec
