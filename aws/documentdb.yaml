@@ -1,0 +1,123 @@
+Description:  "AWS CloudFormation template to create DocumentDB cluster"
+
+Parameters: 
+  DBClusterName: 
+    Description : "MongoDB Cluster Name"
+    Type: "String"
+    MinLength: "1"
+    MaxLength: "64"
+    AllowedPattern : "[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"
+    ConstraintDescription : "Must begin with a letter and contain only alphanumeric characters."
+
+  DBInstanceName: 
+    Description : "MongoDB Instance Name"
+    Type: "String"
+    MinLength: "1"
+    MaxLength: "64"
+    AllowedPattern : "[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"
+    ConstraintDescription : "Must begin with a letter and contain only alphanumeric characters."
+
+  SubnetList:
+    Description : "List of DB subnets"
+    Type: "CommaDelimitedList"
+ 
+  MasterUser:
+    Default : "dbadmin"
+    Description : "The database admin account username"
+    Type: "String"
+    MinLength: "1"
+    MaxLength: "16"
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription : "Must begin with a letter and contain only alphanumeric characters."
+
+  MasterPassword:
+    NoEcho: "true"
+    Description : "The database admin account password"
+    Default : "APassword4DB"
+    Type: "String"
+    MinLength: "1"
+    MaxLength: "41"
+    AllowedPattern : "[a-zA-Z0-9]+"
+    ConstraintDescription : "must contain only alphanumeric characters."
+
+  DBInstanceClass:
+    Description : "Instance class. Please refer to: https://docs.aws.amazon.com/documentdb/latest/developerguide/db-instance-classes.html#db-instance-classes-by-region"
+    Type: "String"
+    Default: "db.r4.large"
+    AllowedValues:
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.12xlarge
+      - db.r5.24xlarge                             
+    ConstraintDescription : "Instance type must be of the ones supported for the region. Please refer to: https://docs.aws.amazon.com/documentdb/latest/developerguide/db-instance-classes.html#db-instance-classes-by-region"  
+
+  RetentionPeriod:
+    Description : "Backup Retention Period in days"
+    Type: "Number"
+    Default: 1
+ 
+  VpcSecurityGroupIds:
+    Description : "Security Groups IDs"
+    Type: "CommaDelimitedList"
+
+Resources:
+
+  PhoenixDBSubnetGroup: 
+    Type: "AWS::DocDB::DBSubnetGroup"
+    Properties: 
+        DBSubnetGroupDescription: "Group of Subnets"
+        SubnetIds: !Ref SubnetList
+
+  DBCluster:
+    Type: "AWS::DocDB::DBCluster"
+    DeletionPolicy: Delete
+    Properties:
+      DBClusterIdentifier: !Ref DBClusterName
+      MasterUsername: !Ref MasterUser
+      MasterUserPassword: !Ref MasterPassword
+      BackupRetentionPeriod: !Ref RetentionPeriod
+      DBSubnetGroupName: !Ref PhoenixDBSubnetGroup
+      VpcSecurityGroupIds: !Ref VpcSecurityGroupIds 
+
+  DBInstance:
+    Type: "AWS::DocDB::DBInstance"
+    Properties:
+      DBClusterIdentifier: !Ref DBCluster
+      DBInstanceIdentifier: !Ref DBInstanceName
+      DBInstanceClass: !Ref DBInstanceClass
+    DependsOn: DBCluster
+
+Outputs:
+  ClusterId:
+    Value: !Ref DBCluster
+  ClusterEndpoint:
+    Value: !GetAtt DBCluster.Endpoint
+  ClusterReadEndpoint:
+    Value: !GetAtt DBCluster.ReadEndpoint
+  ClusterPort:
+    Value: !GetAtt DBCluster.Port
+  InstanceId:
+    Value: !Ref DBInstance
+  InstancePort:
+    Value: !GetAtt DBInstance.Port
+  InstanceEndpoint:
+    Value: !GetAtt DBInstance.Endpoint
+  ClusterConnectionString:
+    Value:
+        !Join
+            - ''
+            - - 'mongodb://'
+              - !Ref MasterUser 
+              - ':'
+              - !Ref MasterPassword
+              - '@'
+              - !GetAtt DBCluster.Endpoint
+              - ':27017/?ssl=true&ssl_ca_certs=rds-combined-ca-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false'

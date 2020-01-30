@@ -1,0 +1,221 @@
+Description:  "AWS CloudFormation template to solve Phoenix Application Problem"
+
+Parameters:
+    # *** This value must always be passed in when creating / updating stack
+    # "NoEcho" is set to true, for security, so token won't be visible when examining the resulting stack
+    GitHubOAuthToken:
+        Type: String
+        NoEcho: true
+        MinLength: 40
+        MaxLength: 40
+        AllowedPattern: '[a-z0-9]*'
+        
+     # *** The owner of the Github repo for this application.
+    GitHubOwner:
+        Type: String
+        Default: vittorio-nardone
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    GitHubRepo:
+        Type: String
+        Default: cloud-phoenix-kata
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    GitHubBranch:
+        Type: String
+        Default: master
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    ChildTemplatesLocation:
+        Type: String
+        Default: 'https://cfvn.s3-eu-west-1.amazonaws.com/phoenix/'
+
+    ApplicationPort:
+        Type: "Number"
+        Default: 3000
+        Description: "Phoenix Application Container Listening Port"
+    PublicPort:
+        Type: "Number"
+        Default: 80
+        Description: "Phoenix Application Load Balancer Public HTTP Port"
+    RetentionInDays:
+        Type: "Number"
+        Default: 7 
+        Description: "DB Backup and Log Retentions in days" 
+    ScalingRequestsPerMinute:
+        Type: "Number"
+        Default: 600
+        Description: "Target Scaling Reference Value in request/minute per target" 
+    BlockedURLs:
+        Type: "CommaDelimitedList"
+        Default: "/crash,/generatecert"
+        Description: "Comma delimited list of URL to be blocked" 
+    MinCapacity:
+        Type: "Number"
+        Default: 2
+        Description: "Phoenix ECS Service min capacity" 
+    MaxCapacity:
+        Type: "Number"
+        Default: 10
+        Description: "Phoenix ECS Service max capacity" 
+
+
+Resources:
+
+    PhoenixCDCIStack:
+        Type:   "AWS::CloudFormation::Stack"
+        Properties:
+            TemplateURL: !Join ['', [!Ref ChildTemplatesLocation, "cdci.yaml"]] 
+            Parameters:
+                GitHubOAuthToken: !Ref GitHubOAuthToken
+                GitHubOwner: !Ref GitHubOwner
+                GitHubRepo: !Ref GitHubRepo
+                GitHubBranch: !Ref GitHubBranch
+                ECSClusterName: "phoenix-ecs-cluster"
+                ECSServiceName: "phoenix-ecs-service"
+
+    VPCStack:
+        Type:   "AWS::CloudFormation::Stack"
+        Properties:
+            TemplateURL: !Join ['', [!Ref ChildTemplatesLocation, "vpc.yaml"]]
+            Parameters:
+                EnvironmentName:    "phoenix-vpc"
+
+    PhoenixAppPublicSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:     
+            GroupDescription: "Security group with public ingress rule on port 80"
+            VpcId: !GetAtt VPCStack.Outputs.VPC
+            SecurityGroupIngress:
+                # Allow access from anywhere to our ALB
+                - CidrIp: 0.0.0.0/0
+                  IpProtocol: tcp
+                  FromPort: !Ref PublicPort
+                  ToPort: !Ref PublicPort
+                
+    PhoenixAppECSSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:     
+            GroupDescription: "ECS Security group with ALB ingress rule"
+            VpcId: !GetAtt VPCStack.Outputs.VPC
+            SecurityGroupIngress:
+                # Allow access from ALB to our ECS services
+                - SourceSecurityGroupId: !Ref PhoenixAppPublicSecurityGroup
+                  IpProtocol: tcp
+                  FromPort: !Ref ApplicationPort
+                  ToPort: !Ref ApplicationPort
+            
+    PhoenixAppDBSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:     
+            GroupDescription: "DB Security group with ECS ingress rule"
+            VpcId: !GetAtt VPCStack.Outputs.VPC
+            SecurityGroupIngress:
+                # Allow access from ECS to our DB service
+                - SourceSecurityGroupId: !Ref PhoenixAppECSSecurityGroup
+                  IpProtocol: tcp
+                  FromPort: 27017
+                  ToPort: 27017
+
+
+    MongoDBStack:
+        Type:   "AWS::CloudFormation::Stack"
+        Properties:
+            TemplateURL: !Join ['', [!Ref ChildTemplatesLocation, "documentdb.yaml"]] 
+            Parameters:
+                DBClusterName:  "PhoenixDBCluster"
+                DBInstanceName: "PhoenixDBInstance"
+                RetentionPeriod: !Ref RetentionInDays   
+                SubnetList: !GetAtt VPCStack.Outputs.PrivateSubnets   
+                VpcSecurityGroupIds: !Join [',', [!Ref PhoenixAppDBSecurityGroup]]    
+
+ 
+    AppLBStack:
+        Type:   "AWS::CloudFormation::Stack"
+        Properties:
+            TemplateURL: !Join ['', [!Ref ChildTemplatesLocation, "alb.yaml"]] 
+            Parameters:
+                EnvironmentName: "PhoenixLB"
+                VPC: !GetAtt VPCStack.Outputs.VPC
+                Subnets: !GetAtt VPCStack.Outputs.PublicSubnets
+                SecurityGroups: !Join [',', [!Ref PhoenixAppPublicSecurityGroup]]
+                ListenerPort: !Ref PublicPort
+
+    PhoenixLogGroup:
+        Type: AWS::Logs::LogGroup
+        Properties: 
+            RetentionInDays: !Ref RetentionInDays
+
+    AppEcsStack:
+        Type:   "AWS::CloudFormation::Stack"
+        Properties:
+            TemplateURL: !Join ['', [!Ref ChildTemplatesLocation, "ecsapp.yaml"]] 
+            Parameters:
+                AppName: "PhoenixApp"
+                ClusterName: "phoenix-ecs-cluster"
+                ServiceName: "phoenix-ecs-service"
+                ImageName: !GetAtt PhoenixCDCIStack.Outputs.PhoenixAppImageURI
+                AppPort: !Ref ApplicationPort
+                EnvSetName: "DB_CONNECTION_STRING"
+                EnvSetValue: !GetAtt MongoDBStack.Outputs.ClusterConnectionString   
+                DesiredCapacity: 2
+                VPC: !GetAtt VPCStack.Outputs.VPC
+                SubnetList: !GetAtt VPCStack.Outputs.PublicSubnets  
+                SecurityGroup: !Ref PhoenixAppECSSecurityGroup  
+                LogsGroup: !Ref PhoenixLogGroup    
+                Listener: !GetAtt AppLBStack.Outputs.Listener
+ 
+    UnwantedRule:
+        Type: AWS::ElasticLoadBalancingV2::ListenerRule
+        Properties:
+            ListenerArn: !GetAtt AppLBStack.Outputs.Listener
+            Priority: 1
+            Conditions:
+                - Field: path-pattern
+                  Values: !Ref BlockedURLs
+            Actions:
+                - RedirectConfig:
+                    Host: "#{host}"
+                    Path: "/"
+                    Port: "#{port}"
+                    Protocol: "#{protocol}"
+                    Query: "#{query}"
+                    StatusCode: HTTP_301 
+                  Type: "redirect"          
+
+
+    ServiceScalableTarget:
+        Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+        Properties:
+            MaxCapacity: !Ref MaxCapacity
+            MinCapacity: !Ref MinCapacity
+            ResourceId: !Join
+            - /
+            - - service
+              - !GetAtt AppEcsStack.Outputs.Cluster
+              - !GetAtt AppEcsStack.Outputs.ServiceName
+            RoleARN: !Join
+            - ''
+            - - 'arn:aws:iam::'
+              - !Ref "AWS::AccountId"
+              - ':role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService'
+            ScalableDimension: ecs:service:DesiredCount
+            ServiceNamespace: ecs
+
+    ServiceScalePolicy:
+        Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+        Properties:
+            PolicyName: ServiceScalePolicy
+            PolicyType: TargetTrackingScaling
+            ScalingTargetId: !Ref ServiceScalableTarget
+            TargetTrackingScalingPolicyConfiguration:
+                PredefinedMetricSpecification:
+                    PredefinedMetricType: "ALBRequestCountPerTarget"
+                    ResourceLabel: !Join [ '/', [!GetAtt AppLBStack.Outputs.LoadBalancerFullName, !GetAtt AppEcsStack.Outputs.TargetGroupFullName] ]
+                ScaleInCooldown: 60
+                ScaleOutCooldown: 60
+                TargetValue: !Ref ScalingRequestsPerMinute               
+Outputs:
+    PhoenixUrl:
+        Description: A reference URL to Phoenix App
+        Value: !GetAtt AppLBStack.Outputs.LoadBalancerUrl

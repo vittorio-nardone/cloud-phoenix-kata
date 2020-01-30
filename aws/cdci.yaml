@@ -1,0 +1,170 @@
+
+Description:  This template deploys a Phoenix Application CDCI Pipeline
+
+Parameters:
+ 
+    # *** This value must always be passed in when creating / updating stack
+    # "NoEcho" is set to true, for security, so token won't be visible when examining the resulting stack
+    GitHubOAuthToken:
+        Type: String
+        NoEcho: true
+        MinLength: 40
+        MaxLength: 40
+        AllowedPattern: '[a-z0-9]*'
+        
+
+     # *** The owner of the Github repo for this application.
+    GitHubOwner:
+        Type: String
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    GitHubRepo:
+        Type: String
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    GitHubBranch:
+        Type: String
+        Default: master
+        AllowedPattern: "[A-Za-z0-9-]+"
+
+    ECSClusterName:
+        Type: String
+        Default: test
+        
+    ECSServiceName:
+        Type: String
+        Default: test
+    
+Resources:
+
+    PhoenixAppImageRepo:
+        Type: AWS::ECR::Repository
+        Properties: 
+            RepositoryName: "phoenix-app-repo"
+
+    CodeBuildRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    Effect: Allow
+                    Principal:
+                        Service: codebuild.amazonaws.com
+                    Action: sts:AssumeRole
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/AdministratorAccess
+                
+
+    PhoenixAppBuildProject:
+        Type: AWS::CodeBuild::Project
+        Properties: 
+            Name: 'PhoenixAppBuildProject'
+            Artifacts: 
+                Type: 'CODEPIPELINE'
+            Environment: 
+                ComputeType: 'BUILD_GENERAL1_SMALL'
+                Image: 'aws/codebuild/amazonlinux2-x86_64-standard:2.0'
+                PrivilegedMode: true
+                Type: 'LINUX_CONTAINER'
+                EnvironmentVariables:
+                    - Name: 'ECR_REPOSITORY_URI'
+                      Type: 'PLAINTEXT'
+                      Value: !Join ['', [!Ref "AWS::AccountId", '.dkr.ecr.', !Ref "AWS::Region", '.amazonaws.com/phoenix-app-repo']]
+            ServiceRole: !Ref CodeBuildRole
+            Source: 
+                Type: 'CODEPIPELINE'
+
+    CodePipelineRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    Effect: Allow
+                    Principal:
+                        Service: codepipeline.amazonaws.com
+                    Action: sts:AssumeRole
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/AdministratorAccess
+
+    PhoenixCDCIPipelineBucket:
+        Type: AWS::S3::Bucket
+
+    PhoenixCDCIPipeline: 
+        Type: AWS::CodePipeline::Pipeline
+        Properties: 
+            ArtifactStore: 
+                Type: 'S3'
+                Location:   !Ref PhoenixCDCIPipelineBucket
+            RoleArn: !GetAtt CodePipelineRole.Arn
+            Stages: 
+            -   Name: Source
+                Actions:
+                -   Name: Source
+                    InputArtifacts: []
+                    ActionTypeId:
+                        Category: Source
+                        Owner: ThirdParty
+                        Version: 1
+                        Provider: GitHub
+                    OutputArtifacts:
+                    -   Name: SourceCode
+                    Configuration:
+                        Owner: !Ref GitHubOwner
+                        Repo: !Ref GitHubRepo
+                        Branch: !Ref GitHubBranch
+                        PollForSourceChanges: true
+                        OAuthToken: !Ref GitHubOAuthToken
+                    RunOrder: 1
+
+            -   Name: Build
+                Actions:
+                -   Name: Build
+                    InputArtifacts: 
+                    -   Name: SourceCode
+                    ActionTypeId:
+                        Category: Build
+                        Owner: AWS
+                        Version: 1
+                        Provider: CodeBuild
+                    OutputArtifacts:
+                    -   Name: BuildCode
+                    Configuration:
+                        ProjectName: !Ref PhoenixAppBuildProject
+                    RunOrder: 2
+
+            -   Name: Deploy
+                Actions:
+                -   Name: Deploy
+                    InputArtifacts: 
+                    -   Name: BuildCode
+                    ActionTypeId:
+                        Category: Deploy
+                        Owner: AWS
+                        Version: 1
+                        Provider: ECS
+                    OutputArtifacts: []
+                    Configuration:
+                        ClusterName: !Ref ECSClusterName
+                        ServiceName: !Ref ECSServiceName
+                    RunOrder: 3
+
+    # PhoenixPipelineWebhook:
+    #     Type: AWS::CodePipeline::Webhook
+    #     Properties:
+    #         Authentication: GITHUB_HMAC
+    #         AuthenticationConfiguration:
+    #             SecretToken: !Ref GitHubOAuthToken
+    #         Filters:
+    #         - JsonPath: "$.ref"    
+    #           MatchEquals: refs/heads/{Branch}
+    #         TargetPipeline: !Ref PhoenixCDCIPipeline 
+    #         TargetAction: Source
+    #         TargetPipelineVersion: !GetAtt PhoenixCDCIPipeline.Version 
+    #         RegisterWithThirdParty: true
+
+    
+Outputs:
+    PhoenixAppImageURI:
+        Value: !Join ['', [!Ref "AWS::AccountId", '.dkr.ecr.', !Ref "AWS::Region", '.amazonaws.com/phoenix-app-repo']]

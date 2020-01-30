@@ -1,0 +1,186 @@
+Description:  "AWS CloudFormation template to create an ECS cluster"
+
+Parameters:
+    AppName:
+        Type: "String"
+        Default: "myApp"
+    ClusterName:
+        Type: "String"
+        Default: "myApp-cluster"
+    ServiceName:
+        Type: "String"
+        Default: "myApp-service"
+    ImageName:
+        Type: "String"
+    MemoryLimit:
+        Type: "String"
+        Default: "512"
+    CpuLimit:
+        Type: "String"
+        Default: "256"
+    AppPort:
+        Type: "Number"
+        Default: "80"
+    EnvSetName:
+        Type: "String"
+        Default: ""
+    EnvSetValue:
+        Type: "String"
+        Default: ""
+    DesiredCapacity:
+        Type: Number
+        Default: '1'
+        Description: Number of containers to launch in ECS cluster.
+    VPC:
+        Type: "String"
+        Description: "ECS App VPC"
+    SubnetList:
+        Description : "List of App subnets"
+        Type: "CommaDelimitedList"
+    SecurityGroup:
+        Description : "Service Security Group"
+        Type: "String"
+    LogsGroup:
+        Description : "ECS to CloudWatch Logs Group"
+        Type: "String"
+    Listener:
+        Description: "The Application Load Balancer listener to register with"
+        Type: String
+    Path:
+        Description: "The path to register with the Application Load Balancer"
+        Type: String
+        Default: /
+
+Resources:
+    ECSCluster:
+        Type: AWS::ECS::Cluster
+        Properties:
+            ClusterName: !Ref ClusterName
+
+    # This is a role which is used by the ECS tasks themselves.
+    ECSTaskExecutionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                        Service: [ecs-tasks.amazonaws.com]
+                      Action: ['sts:AssumeRole']
+            Path: /
+            Policies:
+                - PolicyName: AmazonECSTaskExecutionRolePolicy
+                  PolicyDocument:
+                        Statement:
+                            - Effect: Allow
+                              Action:
+                                    # Allow the ECS Tasks to download images from ECR
+                                    - 'ecr:GetAuthorizationToken'
+                                    - 'ecr:BatchCheckLayerAvailability'
+                                    - 'ecr:GetDownloadUrlForLayer'
+                                    - 'ecr:BatchGetImage'
+
+                                    # Allow the ECS tasks to upload logs to CloudWatch
+                                    - 'logs:CreateLogStream'
+                                    - 'logs:PutLogEvents'
+                              Resource: '*'
+
+    ECSTask: 
+        Type: AWS::ECS::TaskDefinition
+        Properties: 
+            NetworkMode:    'awsvpc'
+            RequiresCompatibilities:
+                - FARGATE
+            Memory: !Ref 'MemoryLimit'
+            Cpu:    !Ref 'CpuLimit'
+            ExecutionRoleArn: !Ref ECSTaskExecutionRole
+            ContainerDefinitions: 
+                - 
+                    Name: !Ref 'AppName'
+                    Image: !Ref 'ImageName'
+                    Memory: !Ref 'MemoryLimit'
+                    Cpu:    !Ref 'CpuLimit'
+                    PortMappings:
+                        -
+                            ContainerPort: !Ref 'AppPort'
+                    Environment: 
+                        -
+                            Name: !Ref 'EnvSetName'
+                            Value: !Ref 'EnvSetValue'
+                    LogConfiguration:
+                        LogDriver: "awslogs"
+                        Options:
+                            awslogs-region: !Ref "AWS::Region"
+                            awslogs-group: !Ref 'LogsGroup'     
+                            awslogs-stream-prefix: 'ecs'
+                            
+                            
+    ECSService:
+        Type: AWS::ECS::Service
+        Properties: 
+            ServiceName: !Ref ServiceName   
+            Cluster: 
+                !Ref ECSCluster
+            DesiredCount: 
+                !Ref DesiredCapacity 
+            TaskDefinition: 
+                Ref: ECSTask
+            LaunchType: 'FARGATE'
+            NetworkConfiguration:
+                AwsvpcConfiguration: 
+                    AssignPublicIp: 'ENABLED'
+                    Subnets: !Ref SubnetList
+                    SecurityGroups:
+                        - !Ref SecurityGroup
+            LoadBalancers:
+                - ContainerName: !Ref 'AppName' 
+                  ContainerPort: !Ref AppPort
+                  TargetGroupArn: !Ref TargetGroup
+                    
+    TargetGroup:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+            VpcId: !Ref VPC
+            Port: !Ref AppPort
+            Protocol: HTTP
+            Matcher:
+                HttpCode: 200-299
+            HealthCheckIntervalSeconds: 10
+            HealthCheckPath: /
+            HealthCheckProtocol: HTTP
+            HealthCheckPort: !Ref AppPort
+            HealthCheckTimeoutSeconds: 5
+            HealthyThresholdCount: 2
+            TargetType: ip
+
+    ListenerRule:
+        Type: AWS::ElasticLoadBalancingV2::ListenerRule
+        Properties:
+            ListenerArn: !Ref Listener
+            Priority: 10
+            Conditions:
+                - Field: path-pattern
+                  Values:
+                    - !Ref Path
+            Actions:
+                - TargetGroupArn: !Ref TargetGroup
+                  Type: forward
+
+Outputs:
+    Cluster:
+        Description: ECS Cluster name
+        Value: !Ref ECSCluster
+                  
+    ServiceName:
+        Description: ECS Service name
+        Value: !GetAtt ECSService.Name
+
+    TargetGroup:
+        Description: ALB Target Group
+        Value: !Ref TargetGroup 
+    
+    TargetGroupFullName:
+        Description: The full name of ALB Target Group
+        Value: !GetAtt TargetGroup.TargetGroupFullName 
+    
+ 
