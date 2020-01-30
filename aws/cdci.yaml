@@ -149,22 +149,7 @@ Resources:
                         ClusterName: !Ref ECSClusterName
                         ServiceName: !Ref ECSServiceName
                     RunOrder: 3
-
-    # PhoenixPipelineWebhook:
-    #     Type: AWS::CodePipeline::Webhook
-    #     Properties:
-    #         Authentication: GITHUB_HMAC
-    #         AuthenticationConfiguration:
-    #             SecretToken: !Ref GitHubOAuthToken
-    #         Filters:
-    #         - JsonPath: "$.ref"    
-    #           MatchEquals: refs/heads/{Branch}
-    #         TargetPipeline: !Ref PhoenixCDCIPipeline 
-    #         TargetAction: Source
-    #         TargetPipelineVersion: !GetAtt PhoenixCDCIPipeline.Version 
-    #         RegisterWithThirdParty: true
-
-    
+   
 Outputs:
     PhoenixAppImageURI:
         Value: !Join ['', [!Ref "AWS::AccountId", '.dkr.ecr.', !Ref "AWS::Region", '.amazonaws.com/phoenix-app-repo']]
