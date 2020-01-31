@@ -42,3 +42,4 @@ you need to guarantee that the application is always available.
 4. Notify any CPU peak
 5. Implements a CI/CD pipeline for the code
 6. Scale when the number of requests is greater than 10 req /sec
+
