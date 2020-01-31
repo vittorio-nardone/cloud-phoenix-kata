@@ -92,8 +92,10 @@ AWS CLI command to create the Phoenix Application Stack is:
     aws cloudformation create-stack --stack-name Phoenix --template-url https://cfvn.s3-eu-west-1.amazonaws.com/phoenix/phoenix.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=GitHubOAuthToken,ParameterValue=<yourOAuthToken>
 
 Please replace `<yourOAuthToken>` with your token.
-Templates are hosted in a public access S3 bucket to simplify deployment. 
 
+At the end of application stack deployment, the output parameter `PhoenixUrl` reports the public application URL.
+
+Templates are hosted in a public access S3 bucket to simplify deployment. 
 Feel free to clone this repository and use your own. 
 In main CloudFormation template `phoenix.yaml` the parameter `ChildTemplatesLocation` could be changed to a different location. 
 
@@ -103,6 +105,8 @@ In main CloudFormation template `phoenix.yaml` the parameter `ChildTemplatesLoca
 - Only one instance is created during DocumentDB deployment (costs).
 - CI/CD pipeline roles need to be properly changed to include required rights only.
 - No application source code changes are required.
+
+
 
 
 
