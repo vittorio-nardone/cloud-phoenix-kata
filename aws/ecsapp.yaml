@@ -14,10 +14,10 @@ Parameters:
         Type: "String"
     MemoryLimit:
         Type: "String"
-        Default: "512"
+        Default: "2048"
     CpuLimit:
         Type: "String"
-        Default: "256"
+        Default: "1024"
     AppPort:
         Type: "Number"
         Default: "80"
@@ -45,11 +45,23 @@ Parameters:
         Type: "String"
     Listener:
         Description: "The Application Load Balancer listener to register with"
-        Type: String
+        Type: "String"
     Path:
         Description: "The path to register with the Application Load Balancer"
-        Type: String
-        Default: /
+        Type: "String"
+        Default: "/*"
+    HealthCheckIntervalSeconds:
+        Description: "The health check frequency in seconds"
+        Type: "Number"
+        Default: 30
+    HealthCheckTimeoutSeconds:
+        Description: "The health check timeout in seconds"
+        Type: "Number"
+        Default: 15
+    HealthyThresholdCount:
+        Description: "The health threshold"
+        Type: "Number"
+        Default: 2        
 
 Resources:
     ECSCluster:
@@ -154,12 +166,12 @@ Resources:
             Protocol: HTTP
             Matcher:
                 HttpCode: 200-299
-            HealthCheckIntervalSeconds: 10
+            HealthCheckIntervalSeconds: !Ref HealthCheckIntervalSeconds
             HealthCheckPath: /
             HealthCheckProtocol: HTTP
             HealthCheckPort: !Ref AppPort
-            HealthCheckTimeoutSeconds: 5
-            HealthyThresholdCount: 2
+            HealthCheckTimeoutSeconds: !Ref HealthCheckTimeoutSeconds
+            HealthyThresholdCount: !Ref HealthyThresholdCount
             TargetType: ip
 
     ListenerRule:
