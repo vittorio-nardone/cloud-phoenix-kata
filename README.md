@@ -83,7 +83,7 @@ Nested stack templates are generic and reusable to deploy different applications
 
 ## Requirements
 
-You need to specify a valid GitHub OAuth Token in `GitHubOAuthToken` parameter of main `phoenix.yaml' CloudFormation template. Please visit ![GitHub](https://github.com/settings/tokens) to generate a new one.
+You need to specify a valid GitHub OAuth token in `GitHubOAuthToken` parameter of main `phoenix.yaml` CloudFormation template. Please visit [GitHub](https://github.com/settings/tokens) to generate a new one.
 
 ## AWS CLI
 
@@ -102,6 +102,7 @@ In main CloudFormation template `phoenix.yaml` the parameter `ChildTemplatesLoca
 - Please check CloudFormation templates for more implementation details.
 - Only one instance is created during DocumentDB deployment (costs).
 - CI/CD pipeline roles need to be properly changed to include required rights only.
+- No application source code changes are required.
 
 
 
