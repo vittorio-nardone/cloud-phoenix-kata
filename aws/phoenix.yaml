@@ -10,7 +10,6 @@ Parameters:
         MaxLength: 40
         AllowedPattern: '[a-z0-9]*'
         
-        
      # *** The owner of the Github repo for this application.
     GitHubOwner:
         Type: String
@@ -166,23 +165,23 @@ Resources:
                 LogsGroup: !Ref PhoenixLogGroup    
                 Listener: !GetAtt AppLBStack.Outputs.Listener
  
-    UnwantedRule:
-        Type: AWS::ElasticLoadBalancingV2::ListenerRule
-        Properties:
-            ListenerArn: !GetAtt AppLBStack.Outputs.Listener
-            Priority: 1
-            Conditions:
-                - Field: path-pattern
-                  Values: !Ref BlockedURLs
-            Actions:
-                - RedirectConfig:
-                    Host: "#{host}"
-                    Path: "/"
-                    Port: "#{port}"
-                    Protocol: "#{protocol}"
-                    Query: "#{query}"
-                    StatusCode: HTTP_301 
-                  Type: "redirect"          
+    # UnwantedRule:
+    #     Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    #     Properties:
+    #         ListenerArn: !GetAtt AppLBStack.Outputs.Listener
+    #         Priority: 1
+    #         Conditions:
+    #             - Field: path-pattern
+    #               Values: !Ref BlockedURLs
+    #         Actions:
+    #             - RedirectConfig:
+    #                 Host: "#{host}"
+    #                 Path: "/"
+    #                 Port: "#{port}"
+    #                 Protocol: "#{protocol}"
+    #                 Query: "#{query}"
+    #                 StatusCode: HTTP_301 
+    #               Type: "redirect"          
 
 
     ServiceScalableTarget:
