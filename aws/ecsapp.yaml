@@ -83,7 +83,16 @@ Resources:
                                     # Allow the ECS tasks to upload logs to CloudWatch
                                     - 'logs:CreateLogStream'
                                     - 'logs:PutLogEvents'
+
+                                    # Allow the ECS tasks to get SSM Parameters
+                                    - 'ssm:GetParameters'
                               Resource: '*'
+
+    ECSTaskSecret:
+        Type: AWS::SSM::Parameter
+        Properties:
+            Type: String
+            Value: !Ref 'EnvSetValue'
 
     ECSTask: 
         Type: AWS::ECS::TaskDefinition
@@ -103,10 +112,10 @@ Resources:
                     PortMappings:
                         -
                             ContainerPort: !Ref 'AppPort'
-                    Environment: 
+                    Secrets: 
                         -
                             Name: !Ref 'EnvSetName'
-                            Value: !Ref 'EnvSetValue'
+                            ValueFrom: !Ref 'ECSTaskSecret'
                     LogConfiguration:
                         LogDriver: "awslogs"
                         Options:
@@ -165,6 +174,27 @@ Resources:
             Actions:
                 - TargetGroupArn: !Ref TargetGroup
                   Type: forward
+
+
+
+
+    CPUPeaksAlarm:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+            AlarmName: CPU utilization greater than 90%
+            AlarmDescription: Alarm to identify cpu peaks
+            Namespace: AWS/ECS
+            MetricName: CPUUtilization
+            Dimensions:
+            -   Name: ClusterName
+                Value: !Ref ECSCluster
+            -   Name: ServiceName
+                Value: !GetAtt ECSService.Name
+            Statistic: Maximum
+            Period: "60"
+            EvaluationPeriods: "1"
+            Threshold: "90"
+            ComparisonOperator: GreaterThanThreshold
 
 Outputs:
     Cluster:
