@@ -85,18 +85,25 @@ Nested stack templates are generic and reusable to deploy different applications
 
 You need to specify a valid GitHub OAuth Token in `GitHubOAuthToken` parameter of main `phoenix.yaml' CloudFormation template. Please visit ![GitHub](https://github.com/settings/tokens) to generate a new one.
 
-## AWS CLI & notes
+## AWS CLI
 
 AWS CLI command to create the Phoenix Application Stack is:
 
-`aws cloudformation create-stack --stack-name Phoenix --template-url https://cfvn.s3-eu-west-1.amazonaws.com/phoenix/phoenix.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=GitHubOAuthToken,ParameterValue=<yourOAuthToken>`
+    aws cloudformation create-stack --stack-name Phoenix --template-url https://cfvn.s3-eu-west-1.amazonaws.com/phoenix/phoenix.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=GitHubOAuthToken,ParameterValue=<yourOAuthToken>
 
 Please replace `<yourOAuthToken>` with your token.
 Templates are hosted in a public access S3 bucket to simplify deployment. 
+
 Feel free to clone this repository and use your own. 
 In main CloudFormation template `phoenix.yaml` the parameter `ChildTemplatesLocation` could be changed to a different location. 
 
-Please check CloudFormation templates for more implementation details.
+# Notes
+
+- Please check CloudFormation templates for more implementation details.
+- Only one instance is created during DocumentDB deployment (costs).
+- CI/CD pipeline roles need to be properly changed to include required rights only.
+
+
 
 
  
